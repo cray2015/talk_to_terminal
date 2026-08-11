@@ -15,6 +15,25 @@ class InjectionBackend(ABC):
     def type_text(self, text: str) -> None:
         """Inject text into whatever window currently has focus."""
 
+    @abstractmethod
+    def press_key(self, action: str) -> None:
+        """Press a named key/combo (see KEY_ACTIONS) into the focused window."""
+
+
+# Server-side allowlist for POST /key — the wire format (dict keys) is
+# also the `data-action` vocabulary used by web/index.html, so frontend
+# and backend share one set of action names with no translation layer.
+KEY_ACTIONS = {
+    "tab": "Tab",
+    "shift+tab": "shift+Tab",
+    "enter": "Return",
+    "esc": "Escape",
+    "ctrl+c": "ctrl+c",
+    "1": "1",
+    "2": "2",
+    "3": "3",
+}
+
 
 def _chunks(s: str, size: int):
     for i in range(0, len(s), size):
@@ -79,6 +98,12 @@ class XdotoolBackend(InjectionBackend):
         cmd.append(s)
         self._run(cmd)
 
+    def press_key(self, action: str) -> None:
+        combo = KEY_ACTIONS.get(action)
+        if combo is None:
+            raise ValueError(f"unknown key action: {action!r}")
+        self._run(["xdotool", "key", "--clearmodifiers", combo])
+
     def _paste(self, text: str) -> None:
         subprocess.run(
             ["xclip", "-selection", "clipboard"],
@@ -108,6 +133,12 @@ class YdotoolBackend(InjectionBackend):
     def type_text(self, text: str) -> None:
         raise NotImplementedError(
             "ydotool backend is a stub — implement type_text() in "
+            "injection.YdotoolBackend before setting DICTATION_BACKEND=ydotool"
+        )
+
+    def press_key(self, action: str) -> None:
+        raise NotImplementedError(
+            "ydotool backend is a stub — implement press_key() in "
             "injection.YdotoolBackend before setting DICTATION_BACKEND=ydotool"
         )
 

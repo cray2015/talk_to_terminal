@@ -2,7 +2,10 @@
 
 Dictate on your iPhone using Apple's own on-device dictation, and have the
 text typed straight into whatever's focused on your Linux box — text
-editor, VS Code, a terminal running Claude Code, anything. Transport is
+editor, VS Code, a terminal running Claude Code, anything. A small
+browser page (section 6) also lets you drive a focused Claude Code
+session directly — Tab/Enter/Esc, approval menus, and custom macros
+like `/model` or `/cost` — without dictating each command. Transport is
 your local LAN (iPhone and this box on the same Wi-Fi/router) — see
 `project_spec.md` for the full design and rationale.
 
@@ -158,6 +161,66 @@ Since the unit is `WantedBy=graphical-session.target`, it should restart
 automatically with the session. If it doesn't come back after a logout/
 login or reboot, run `systemctl --user enable --now
 dictation-bridge.service` manually as a workaround and note that here.
+
+## 6. Browser remote page
+
+The listener also serves a small browser page — a Dictate tab (a
+browser-based alternative to the iOS Shortcut) and a Remote tab for
+driving a focused Claude Code session without dictating each command.
+No separate service and no new dependency: it's the same
+`dictation-bridge.service` process, same port.
+
+**Deploying this for the first time** still needs the normal update
+steps — `git pull` in the checkout, then
+`systemctl --user restart dictation-bridge.service` — same as any other
+code change. After that, editing the macro list from the page itself
+does **not** require a restart (see below).
+
+Open `http://<lan-ip>:8766/` on your phone (or desktop) browser. On
+first load you'll be asked for the shared secret — the same value as
+`DICTATION_SHARED_SECRET` in `config.env`. It's saved in the browser's
+`localStorage` so you only enter it once per device; note that anything
+in `localStorage` is visible to anyone with devtools access to that
+browser, which is an accepted trade-off consistent with the existing
+threat model (anyone who has the secret can already `curl /type`
+directly — the browser is just another such client). Use "Change
+secret" if you ever need to re-enter it (e.g. after rotating
+`DICTATION_SHARED_SECRET`).
+
+**Dictate tab**: a text box that POSTs to `/type`, same as the iOS
+Shortcut. iOS Safari's on-screen keyboard mic button works in any
+focused text field, so this doubles as a real dictation path from the
+browser, not just a paste box.
+
+**Remote tab**: buttons that POST to the new `/key` endpoint (a named
+action, validated server-side against a fixed allowlist, mapped to
+`xdotool key <combo>` — see `project_spec.md` section 3, "Remote mode")
+and to a macro list (typed literal text + Enter). Tied to actual Claude
+Code behavior:
+
+- **Tab / Shift+Tab / Enter** (primary row) — Shift+Tab cycles plan
+  mode/accept-edits/auto mode; Enter confirms whatever's focused,
+  including numbered approval/plan menus.
+- **Macros** (primary row, next to nav) — a user-editable list of text
+  snippets, starting with `/model`, `/context`, `/cost`, `/vis`. Tap
+  "+ Add" to add one, tap the "×" on a chip to remove it. Edits are
+  saved to `~/.config/dictation-bridge/macros.json` immediately —
+  **no service restart needed** to pick them up, since the file is read
+  fresh on every request. Clicking a macro types the literal text, then
+  presses Enter (two separate calls under the hood, not a trick with a
+  trailing newline — see `project_spec.md` for why).
+- **Esc / Ctrl+C / 1 / 2 / 3** (secondary row, smaller) — occasional-use
+  actions: Esc interrupts (double-Esc opens the rewind menu), Ctrl+C
+  cancels the current task without exiting, and 1/2/3 pick options in
+  numbered plan/permission menus (still confirmed with Enter).
+
+Manual checks, same style as section 1's curl test:
+
+```bash
+curl -i -X POST http://localhost:8766/key -H "X-Auth: <your secret>" --data "tab"
+curl -i -X POST http://localhost:8766/key -H "X-Auth: <your secret>" --data "bogus"   # 400, not in the allowlist
+curl -i http://localhost:8766/macros -H "X-Auth: <your secret>"                        # seeded macro list
+```
 
 ## Notes
 

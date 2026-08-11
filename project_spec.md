@@ -18,6 +18,9 @@ terminal running a Claude Code session.
   Wi-Fi/router) rather than exposing anything publicly. Since a LAN is
   a broader trust boundary than a private overlay network, the
   shared-secret header is load-bearing, not just defense in depth.
+- Claude Code control (see "Remote mode" in section 3) reuses the same
+  transport/injection concept as dictation: no new service, just a
+  second capability (`/key`) on the same listener.
 
 ## 3. Architecture
 
@@ -47,6 +50,27 @@ listener validates the auth header → text is split on `\n` → xdotool
 types each line, with a `Return` keypress between lines → text appears
 in the focused window.
 
+### Remote mode
+
+A browser page, served by the same listener/process (no new service),
+adds a second capability alongside dictation:
+
+- Second tab/toggle on the page — a "Dictate" tab (browser alternative
+  to the iOS Shortcut, POSTs to `/type`) and a "Remote" tab — not a
+  separate page or service.
+- New endpoint `POST /key`, taking a named action string, mapped
+  server-side to `xdotool key <combo>` against a fixed allowlist —
+  mechanically distinct from `/type`'s literal-text typing.
+- Two button categories on the Remote tab, since they're mechanically
+  different:
+  - **Key-combo buttons** (single `xdotool key` call): Tab, Shift+Tab,
+    Enter, Esc, Ctrl+C, and 1/2/3 for numbered approval/plan prompts.
+  - **Quick-command macros** (types literal text + Enter, via the
+    `/type`-style path, not `/key`): a user-configurable list of text
+    snippets — starting set `/model`, `/context`, `/cost`, `/vis` —
+    editable (add/remove) from the page itself, persisted server-side
+    (not hardcoded in source), since this list will grow.
+
 ## 4. Functional requirements
 
 - **FR1** — HTTP POST endpoint `/type` accepting a raw text body,
@@ -65,6 +89,14 @@ in the focused window.
   failure, starting with the graphical session.
 - **FR7** — Text should appear within roughly 1 second of the POST
   arriving under normal conditions.
+- **FR10** — `POST /key` accepts a named key/combo, validated against
+  an allowlist, mapped to the correct `xdotool key` syntax.
+- **FR11** — Macro list (text-snippet buttons) is user-configurable via
+  the page itself, not hardcoded in source.
+- **FR12** — Remote tab prioritizes Tab / Shift+Tab / Enter and the
+  macro row as primary, larger buttons; Esc / Ctrl+C / 1-2-3 as a
+  smaller secondary row — reflecting that navigation and macros are the
+  actual daily usage, interrupt/approval is occasional.
 
 ## 5. Non-functional / operational requirements
 
@@ -110,6 +142,14 @@ in the focused window.
   explicitly in the unit (confirm the exact `XAUTHORITY` path via `echo
   $XAUTHORITY` in an active desktop session — it varies by display
   manager).
+- **Claude Code keybinding semantics — reference, not open, kept here so
+  the implementer doesn't have to re-verify:** Shift+Tab cycles plan
+  mode/accept-edits/auto mode; Esc interrupts, double-Esc opens the
+  rewind menu; Ctrl+C cancels the current task without exiting;
+  plan/permission approval prompts are numbered menus confirmed with
+  Enter; `/model`, `/context`, and `/cost` are typed slash commands, not
+  keystrokes — that's why they go through the macro (`/type`) path
+  rather than `/key`.
 
 ## 7. Reference implementation (starting point)
 
@@ -141,6 +181,11 @@ and the terminal-reliability question above hasn't been tested yet.
       stderr/journal — never logging dictated text content itself
 - [ ] Updated README covering setup, the iOS Shortcut steps, and
       troubleshooting for the DISPLAY/XAUTHORITY and Wayland cases
+- [ ] Remote mode: browser page (Dictate + Remote tabs) served by the
+      same listener, `POST /key` with a server-side allowlist, and a
+      user-configurable (add/remove from the page) macro list persisted
+      to `~/.config/dictation-bridge/macros.json` with no restart
+      required to pick up edits
 
 ## 9. Explicitly out of scope
 
@@ -169,3 +214,13 @@ and the terminal-reliability question above hasn't been tested yet.
    (401) and types nothing. — confirmed, both via curl and via the real iPhone Shortcut.
 5. [ ] Confirm the service survives a restart of the graphical session, or
    the README documents the manual restart step required. — not yet tested.
+6. [ ] Remote mode: `/key` with an action outside the allowlist returns
+   `400` and presses nothing; `/key` with a valid action (e.g. `tab`)
+   against a focused window presses the correct combo; a wrong/missing
+   `X-Auth` on `/key` or `/macros*` returns `401`.
+7. [ ] Remote mode: adding and removing a macro from the Remote tab
+   updates `GET /macros` immediately (no restart), and the change
+   survives a service restart (file-backed persistence).
+8. [ ] Remote mode: exercised against a real, focused Claude Code
+   terminal session — Tab/Shift+Tab/Enter/Esc/Ctrl+C/1-2-3 and at least
+   one macro click, confirming the grounded semantics in section 6.

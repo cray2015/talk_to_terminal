@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Dictation Bridge</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #111417;
+    --panel: #1a1e23;
+    --border: #2a2f36;
+    --text: #e8eaed;
+    --muted: #8a919c;
+    --accent: #3b82f6;
+    --danger: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 16px;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.4 -apple-system, system-ui, sans-serif;
+    padding-bottom: 48px;
+  }
+  h1 { font-size: 18px; margin: 0 0 12px; }
+
+  #auth-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  #auth-bar input {
+    flex: 1;
+    min-width: 0;
+  }
+  #auth-status {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+  #auth-status a { color: var(--accent); }
+
+  input, textarea, button {
+    font: inherit;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  button {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:active { background: #23282f; }
+
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .tabs button {
+    flex: 1;
+    padding: 12px;
+    font-weight: 600;
+  }
+  .tabs button.active {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .view { display: none; }
+  .view.active { display: block; }
+
+  textarea#dictate-text {
+    width: 100%;
+    height: 140px;
+    resize: vertical;
+    margin-bottom: 8px;
+  }
+  #dictate-send {
+    width: 100%;
+    padding: 14px;
+    font-weight: 600;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+
+  .section-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin: 20px 0 8px;
+  }
+  .section-label:first-child { margin-top: 0; }
+
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .btn-primary {
+    flex: 1 1 30%;
+    min-width: 90px;
+    padding: 16px 8px;
+    font-weight: 600;
+    font-size: 16px;
+  }
+
+  .macro-chip {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    flex: 1 1 42%;
+    min-width: 110px;
+  }
+  .macro-chip button.macro-run {
+    flex: 1;
+    border: none;
+    border-radius: 0;
+    padding: 16px 8px;
+    font-weight: 600;
+  }
+  .macro-chip button.macro-remove {
+    border: none;
+    border-left: 1px solid var(--border);
+    border-radius: 0;
+    padding: 0 12px;
+    color: var(--danger);
+  }
+  #macro-add {
+    flex: 1 1 42%;
+    min-width: 110px;
+    padding: 16px 8px;
+    color: var(--muted);
+    border-style: dashed;
+  }
+
+  .btn-secondary {
+    flex: 1 1 18%;
+    min-width: 56px;
+    padding: 10px 4px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  #status {
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--muted);
+    min-height: 18px;
+  }
+  #status.error { color: var(--danger); }
+</style>
+</head>
+<body>
+
+<h1>Dictation Bridge</h1>
+
+<div id="auth-bar" hidden>
+  <input id="auth-input" type="password" placeholder="Shared secret" autocomplete="off">
+  <button id="auth-save">Save</button>
+</div>
+<div id="auth-status" hidden>
+  Connected. <a id="auth-change" href="#">Change secret</a>
+</div>
+
+<div class="tabs">
+  <button id="tab-btn-dictate" class="active">Dictate</button>
+  <button id="tab-btn-remote">Remote</button>
+</div>
+
+<div id="view-dictate" class="view active">
+  <textarea id="dictate-text" placeholder="Type or dictate here (tap the mic on the keyboard), then Send."></textarea>
+  <button id="dictate-send">Send</button>
+</div>
+
+<div id="view-remote" class="view">
+  <div class="section-label">Navigation</div>
+  <div class="row">
+    <button class="btn-primary" data-key="tab">Tab</button>
+    <button class="btn-primary" data-key="shift+tab">Shift+Tab</button>
+    <button class="btn-primary" data-key="enter">Enter</button>
+  </div>
+
+  <div class="section-label">Macros</div>
+  <div class="row" id="macro-row">
+    <!-- macro chips injected here -->
+    <button id="macro-add">+ Add</button>
+  </div>
+  <div class="row" id="macro-add-row" hidden>
+    <input id="macro-add-input" type="text" placeholder="/help" style="flex:1 1 60%;">
+    <button id="macro-add-confirm" class="btn-primary" style="flex:0 0 auto;">Add</button>
+    <button id="macro-add-cancel" class="btn-secondary" style="flex:0 0 auto;">Cancel</button>
+  </div>
+
+  <div class="section-label">Interrupt / approve</div>
+  <div class="row">
+    <button class="btn-secondary" data-key="esc">Esc</button>
+    <button class="btn-secondary" data-key="ctrl+c">Ctrl+C</button>
+    <button class="btn-secondary" data-key="1">1</button>
+    <button class="btn-secondary" data-key="2">2</button>
+    <button class="btn-secondary" data-key="3">3</button>
+  </div>
+</div>
+
+<div id="status"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var TOKEN_KEY = "dictationAuth";
+
+  function getToken() { return localStorage.getItem(TOKEN_KEY) || ""; }
+  function setToken(t) { localStorage.setItem(TOKEN_KEY, t); }
+  function clearToken() { localStorage.removeItem(TOKEN_KEY); }
+
+  var authBar = document.getElementById("auth-bar");
+  var authInput = document.getElementById("auth-input");
+  var authSave = document.getElementById("auth-save");
+  var authStatus = document.getElementById("auth-status");
+  var authChange = document.getElementById("auth-change");
+  var statusEl = document.getElementById("status");
+
+  function renderAuth() {
+    if (getToken()) {
+      authBar.hidden = true;
+      authStatus.hidden = false;
+    } else {
+      authBar.hidden = false;
+      authStatus.hidden = true;
+    }
+  }
+
+  authSave.addEventListener("click", function () {
+    var v = authInput.value.trim();
+    if (!v) return;
+    setToken(v);
+    authInput.value = "";
+    renderAuth();
+    loadMacros();
+  });
+
+  authChange.addEventListener("click", function (e) {
+    e.preventDefault();
+    clearToken();
+    renderAuth();
+  });
+
+  function setStatus(msg, isError) {
+    statusEl.textContent = msg || "";
+    statusEl.className = isError ? "error" : "";
+  }
+
+  // Thin fetch wrapper: attaches X-Auth, and on 401 clears the stored
+  // token and re-prompts rather than silently failing.
+  function apiFetch(path, opts) {
+    opts = opts || {};
+    opts.headers = opts.headers || {};
+    opts.headers["X-Auth"] = getToken();
+    return fetch(path, opts).then(function (res) {
+      if (res.status === 401) {
+        clearToken();
+        renderAuth();
+        setStatus("Wrong or expired secret — enter it again.", true);
+        throw new Error("unauthorized");
+      }
+      return res;
+    });
+  }
+
+  // --- tabs ---
+
+  var tabBtnDictate = document.getElementById("tab-btn-dictate");
+  var tabBtnRemote = document.getElementById("tab-btn-remote");
+  var viewDictate = document.getElementById("view-dictate");
+  var viewRemote = document.getElementById("view-remote");
+
+  function showTab(name) {
+    var dictateActive = name === "dictate";
+    tabBtnDictate.classList.toggle("active", dictateActive);
+    tabBtnRemote.classList.toggle("active", !dictateActive);
+    viewDictate.classList.toggle("active", dictateActive);
+    viewRemote.classList.toggle("active", !dictateActive);
+    if (!dictateActive) loadMacros();
+  }
+  tabBtnDictate.addEventListener("click", function () { showTab("dictate"); });
+  tabBtnRemote.addEventListener("click", function () { showTab("remote"); });
+
+  // --- dictate ---
+
+  var dictateText = document.getElementById("dictate-text");
+  var dictateSend = document.getElementById("dictate-send");
+
+  dictateSend.addEventListener("click", function () {
+    var text = dictateText.value;
+    if (!text.trim()) return;
+    dictateSend.disabled = true;
+    apiFetch("/type", { method: "POST", body: text })
+      .then(function (res) {
+        if (!res.ok) throw new Error("send failed (" + res.status + ")");
+        dictateText.value = "";
+        setStatus("Sent.");
+      })
+      .catch(function (err) {
+        if (err.message !== "unauthorized") setStatus(err.message, true);
+      })
+      .finally(function () { dictateSend.disabled = false; });
+  });
+
+  // --- remote: key-combo buttons ---
+
+  document.querySelectorAll("[data-key]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      sendKey(btn.getAttribute("data-key"));
+    });
+  });
+
+  function sendKey(action) {
+    return apiFetch("/key", { method: "POST", body: action })
+      .then(function (res) {
+        if (!res.ok) throw new Error("key failed (" + res.status + ")");
+        setStatus("Sent: " + action);
+      })
+      .catch(function (err) {
+        if (err.message !== "unauthorized") setStatus(err.message, true);
+      });
+  }
+
+  // --- remote: macros ---
+
+  var macroRow = document.getElementById("macro-row");
+  var macroAddBtn = document.getElementById("macro-add");
+
+  function loadMacros() {
+    if (!getToken()) return;
+    apiFetch("/macros")
+      .then(function (res) { return res.json(); })
+      .then(function (data) { renderMacros(data.macros || []); })
+      .catch(function () { /* status already set by apiFetch on 401 */ });
+  }
+
+  function renderMacros(macros) {
+    macroRow.querySelectorAll(".macro-chip").forEach(function (el) { el.remove(); });
+    macros.forEach(function (m) {
+      var chip = document.createElement("div");
+      chip.className = "macro-chip";
+
+      var run = document.createElement("button");
+      run.className = "macro-run";
+      run.textContent = m.text;
+      run.addEventListener("click", function () { runMacro(m.text); });
+
+      var remove = document.createElement("button");
+      remove.className = "macro-remove";
+      remove.textContent = "×";
+      remove.setAttribute("aria-label", "Remove " + m.text);
+      remove.addEventListener("click", function (e) {
+        e.stopPropagation();
+        removeMacro(m.id);
+      });
+
+      chip.appendChild(run);
+      chip.appendChild(remove);
+      macroRow.insertBefore(chip, macroAddBtn);
+    });
+  }
+
+  function runMacro(text) {
+    // Two calls, not one /type with a trailing newline: explicit
+    // "type" then "submit" beats relying on _type()'s incidental
+    // trailing-Return behavior for a single line. See project_spec.md,
+    // Remote mode.
+    return apiFetch("/type", { method: "POST", body: text })
+      .then(function (res) {
+        if (!res.ok) throw new Error("macro send failed (" + res.status + ")");
+        return sendKey("enter");
+      })
+      .catch(function (err) {
+        if (err.message !== "unauthorized") setStatus(err.message, true);
+      });
+  }
+
+  var macroAddRow = document.getElementById("macro-add-row");
+  var macroAddInput = document.getElementById("macro-add-input");
+  var macroAddConfirm = document.getElementById("macro-add-confirm");
+  var macroAddCancel = document.getElementById("macro-add-cancel");
+
+  macroAddBtn.addEventListener("click", function () {
+    macroAddRow.hidden = false;
+    macroAddBtn.hidden = true;
+    macroAddInput.value = "";
+    macroAddInput.focus();
+  });
+
+  function closeAddRow() {
+    macroAddRow.hidden = true;
+    macroAddBtn.hidden = false;
+  }
+  macroAddCancel.addEventListener("click", closeAddRow);
+
+  function submitNewMacro() {
+    var text = macroAddInput.value.trim();
+    if (!text) { closeAddRow(); return; }
+    apiFetch("/macros", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text }),
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error("add macro failed (" + res.status + ")");
+        setStatus("Macro added.");
+        closeAddRow();
+        loadMacros();
+      })
+      .catch(function (err) {
+        if (err.message !== "unauthorized") setStatus(err.message, true);
+      });
+  }
+  macroAddConfirm.addEventListener("click", submitNewMacro);
+  macroAddInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") submitNewMacro();
+  });
+
+  function removeMacro(id) {
+    apiFetch("/macros/remove", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: id }),
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error("remove macro failed (" + res.status + ")");
+        setStatus("Macro removed.");
+        loadMacros();
+      })
+      .catch(function (err) {
+        if (err.message !== "unauthorized") setStatus(err.message, true);
+      });
+  }
+
+  // --- init ---
+
+  renderAuth();
+  if (getToken()) loadMacros();
+})();
+</script>
+</body>
+</html>
