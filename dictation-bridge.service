@@ -1,0 +1,23 @@
+[Unit]
+Description=iPhone dictation to Linux keystroke bridge
+After=graphical-session.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/dictation-bridge/config.env
+ExecStart=/usr/bin/python3 %h/workspace/iphone_dict_capture/linux_listener.py
+Restart=on-failure
+RestartSec=2
+
+# If xdotool silently does nothing after `systemctl --user start`, the
+# service didn't inherit the graphical session's X access. Check with:
+#   systemctl --user show-environment | grep -E 'DISPLAY|XAUTHORITY'
+# On this box (Mint Cinnamon, X11) the active session uses DISPLAY=:0 and
+# XAUTHORITY=%h/.Xauthority — confirm with `echo $DISPLAY $XAUTHORITY` in
+# a real desktop terminal, then uncomment below if the service doesn't
+# pick them up on its own:
+# Environment=DISPLAY=:0
+# Environment=XAUTHORITY=%h/.Xauthority
+
+[Install]
+WantedBy=graphical-session.target
