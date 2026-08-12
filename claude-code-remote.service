@@ -19,5 +19,10 @@ RestartSec=2
 # Environment=DISPLAY=:0
 # Environment=XAUTHORITY=%h/.Xauthority
 
+# WantedBy=default.target (not graphical-session.target): on this box
+# (Mint Cinnamon) graphical-session.target is never reliably activated by
+# the session, so units pulled in only by it never auto-start on login/
+# reboot. default.target always fires, and DISPLAY/XAUTHORITY are already
+# present in the user systemd instance's environment regardless.
 [Install]
-WantedBy=graphical-session.target
+WantedBy=default.target
