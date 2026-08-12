@@ -29,7 +29,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s",
 )
-log = logging.getLogger("dictation-bridge")
+log = logging.getLogger("claude-code-remote")
 
 injection_lock = Lock()
 macros_lock = Lock()
@@ -69,7 +69,7 @@ def load_config():
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "DictationBridge/1.0"
+    server_version = "ClaudeCodeRemote/1.0"
 
     def log_message(self, fmt, *args):
         log.info("%s - %s", self.client_address[0], fmt % args)
@@ -148,6 +148,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 

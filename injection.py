@@ -1,4 +1,4 @@
-"""Keystroke-injection backends for the dictation bridge.
+"""Keystroke-injection backends for Claude Code Remote.
 
 Kept behind the InjectionBackend interface so the HTTP layer never has to
 change when swapping X11 (xdotool) for Wayland (ydotool) — see
@@ -29,6 +29,10 @@ KEY_ACTIONS = {
     "enter": "Return",
     "esc": "Escape",
     "ctrl+c": "ctrl+c",
+    "ctrl+e": "ctrl+e",
+    "ctrl+u": "ctrl+u",
+    "up": "Up",
+    "down": "Down",
     "1": "1",
     "2": "2",
     "3": "3",

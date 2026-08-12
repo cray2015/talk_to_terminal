@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>Dictation Bridge</title>
+<title>Claude Code Remote</title>
 <style>
   :root {
     color-scheme: dark;
@@ -16,6 +16,11 @@
     --danger: #ef4444;
   }
   * { box-sizing: border-box; }
+  /* Elements like #auth-bar and .row also set their own `display`, which
+     has equal-or-higher CSS specificity than the browser's default
+     `[hidden] { display: none }` rule and silently wins — so `hidden`
+     must be forced here or JS-driven hide/show does nothing visually. */
+  [hidden] { display: none !important; }
   body {
     margin: 0;
     padding: 16px;
@@ -24,7 +29,19 @@
     font: 16px/1.4 -apple-system, system-ui, sans-serif;
     padding-bottom: 48px;
   }
-  h1 { font-size: 18px; margin: 0 0 12px; }
+
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  h1 { font-size: 18px; margin: 0; }
+  #auth-gear {
+    padding: 8px 10px;
+    font-size: 16px;
+    line-height: 1;
+  }
 
   #auth-bar {
     display: flex;
@@ -35,12 +52,6 @@
     flex: 1;
     min-width: 0;
   }
-  #auth-status {
-    font-size: 13px;
-    color: var(--muted);
-    margin-bottom: 16px;
-  }
-  #auth-status a { color: var(--accent); }
 
   input, textarea, button {
     font: inherit;
@@ -56,37 +67,35 @@
   }
   button:active { background: #23282f; }
 
-  .tabs {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 16px;
-  }
-  .tabs button {
-    flex: 1;
-    padding: 12px;
-    font-weight: 600;
-  }
-  .tabs button.active {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-
-  .view { display: none; }
-  .view.active { display: block; }
-
   textarea#dictate-text {
     width: 100%;
-    height: 140px;
+    height: 110px;
     resize: vertical;
     margin-bottom: 8px;
   }
-  #dictate-send {
+  .dictate-row {
+    display: flex;
+    gap: 8px;
+  }
+  .btn-wide {
+    flex: 1;
+    padding: 14px;
+    font-weight: 600;
+  }
+  #dictate-send-enter {
     width: 100%;
     padding: 14px;
     font-weight: 600;
+    margin-bottom: 8px;
     background: var(--accent);
     border-color: var(--accent);
     color: white;
+  }
+
+  hr.divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 20px 0;
   }
 
   .section-label {
@@ -94,9 +103,28 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--muted);
-    margin: 20px 0 8px;
+    margin: 0 0 8px;
   }
-  .section-label:first-child { margin-top: 0; }
+
+  .nav-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-areas:
+      ".    up   ."
+      "esc  .    tab"
+      ".    down .";
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .nav-grid button {
+    padding: 18px 8px;
+    font-weight: 600;
+    font-size: 18px;
+  }
+  .nav-grid [data-key="up"]   { grid-area: up; }
+  .nav-grid [data-key="down"] { grid-area: down; }
+  .nav-grid [data-key="esc"]  { grid-area: esc; font-size: 15px; }
+  .nav-grid [data-key="tab"]  { grid-area: tab; font-size: 15px; }
 
   .row {
     display: flex;
@@ -104,12 +132,23 @@
     gap: 8px;
   }
 
-  .btn-primary {
-    flex: 1 1 30%;
-    min-width: 90px;
-    padding: 16px 8px;
-    font-weight: 600;
-    font-size: 16px;
+  .btn-secondary {
+    flex: 1 1 18%;
+    min-width: 56px;
+    padding: 10px 4px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .accordion-toggle {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    padding: 8px 0;
+    color: var(--muted);
+    font-size: 13px;
   }
 
   .macro-chip {
@@ -125,8 +164,9 @@
     flex: 1;
     border: none;
     border-radius: 0;
-    padding: 16px 8px;
+    padding: 12px 8px;
     font-weight: 600;
+    font-size: 14px;
   }
   .macro-chip button.macro-remove {
     border: none;
@@ -138,17 +178,35 @@
   #macro-add {
     flex: 1 1 42%;
     min-width: 110px;
-    padding: 16px 8px;
+    padding: 12px 8px;
     color: var(--muted);
     border-style: dashed;
   }
 
-  .btn-secondary {
-    flex: 1 1 18%;
-    min-width: 56px;
-    padding: 10px 4px;
+  .history-chip {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    flex: 1 1 100%;
+  }
+  .history-chip button.history-load {
+    flex: 1;
+    border: none;
+    border-radius: 0;
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 400;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #history-empty {
     font-size: 13px;
     color: var(--muted);
+    padding: 4px 0;
   }
 
   #status {
@@ -162,53 +220,56 @@
 </head>
 <body>
 
-<h1>Dictation Bridge</h1>
+<div class="header">
+  <h1>Claude Code Remote</h1>
+  <button id="auth-gear" aria-label="Secret settings">⚙</button>
+</div>
 
 <div id="auth-bar" hidden>
   <input id="auth-input" type="password" placeholder="Shared secret" autocomplete="off">
   <button id="auth-save">Save</button>
 </div>
-<div id="auth-status" hidden>
-  Connected. <a id="auth-change" href="#">Change secret</a>
+
+<textarea id="dictate-text" autofocus placeholder="Type or dictate here (tap the mic on the keyboard), then Send."></textarea>
+<button id="dictate-send-enter">Send &amp; Enter</button>
+<div class="dictate-row">
+  <button id="dictate-send" class="btn-wide">Send</button>
+  <button id="dictate-enter" class="btn-wide" data-key="enter">Enter</button>
 </div>
 
-<div class="tabs">
-  <button id="tab-btn-dictate" class="active">Dictate</button>
-  <button id="tab-btn-remote">Remote</button>
+<button id="history-toggle" class="accordion-toggle">&#9656; History</button>
+<div class="row" id="history-row" hidden>
+  <div id="history-empty">Nothing sent yet.</div>
+  <!-- history chips injected here -->
 </div>
 
-<div id="view-dictate" class="view active">
-  <textarea id="dictate-text" placeholder="Type or dictate here (tap the mic on the keyboard), then Send."></textarea>
-  <button id="dictate-send">Send</button>
+<hr class="divider">
+
+<div class="section-label">Navigate</div>
+<div class="nav-grid">
+  <button data-key="up">&uarr;</button>
+  <button data-key="esc">Esc</button>
+  <button data-key="tab">Tab</button>
+  <button data-key="down">&darr;</button>
+</div>
+<div class="row">
+  <button class="btn-secondary" data-key="shift+tab">Shift+Tab</button>
+  <button class="btn-secondary" data-key="ctrl+c">Ctrl+C</button>
+  <button class="btn-secondary" id="btn-clear-line">Clear</button>
+  <button class="btn-secondary" data-key="1">1</button>
+  <button class="btn-secondary" data-key="2">2</button>
+  <button class="btn-secondary" data-key="3">3</button>
 </div>
 
-<div id="view-remote" class="view">
-  <div class="section-label">Navigation</div>
-  <div class="row">
-    <button class="btn-primary" data-key="tab">Tab</button>
-    <button class="btn-primary" data-key="shift+tab">Shift+Tab</button>
-    <button class="btn-primary" data-key="enter">Enter</button>
-  </div>
-
-  <div class="section-label">Macros</div>
-  <div class="row" id="macro-row">
-    <!-- macro chips injected here -->
-    <button id="macro-add">+ Add</button>
-  </div>
-  <div class="row" id="macro-add-row" hidden>
-    <input id="macro-add-input" type="text" placeholder="/help" style="flex:1 1 60%;">
-    <button id="macro-add-confirm" class="btn-primary" style="flex:0 0 auto;">Add</button>
-    <button id="macro-add-cancel" class="btn-secondary" style="flex:0 0 auto;">Cancel</button>
-  </div>
-
-  <div class="section-label">Interrupt / approve</div>
-  <div class="row">
-    <button class="btn-secondary" data-key="esc">Esc</button>
-    <button class="btn-secondary" data-key="ctrl+c">Ctrl+C</button>
-    <button class="btn-secondary" data-key="1">1</button>
-    <button class="btn-secondary" data-key="2">2</button>
-    <button class="btn-secondary" data-key="3">3</button>
-  </div>
+<button id="macros-toggle" class="accordion-toggle">&#9656; Macros</button>
+<div class="row" id="macro-row" hidden>
+  <!-- macro chips injected here -->
+  <button id="macro-add">+ Add</button>
+</div>
+<div class="row" id="macro-add-row" hidden>
+  <input id="macro-add-input" type="text" placeholder="/help" style="flex:1 1 60%;">
+  <button id="macro-add-confirm" style="flex:0 0 auto;">Add</button>
+  <button id="macro-add-cancel" class="btn-secondary" style="flex:0 0 auto;">Cancel</button>
 </div>
 
 <div id="status"></div>
@@ -223,36 +284,30 @@
   function setToken(t) { localStorage.setItem(TOKEN_KEY, t); }
   function clearToken() { localStorage.removeItem(TOKEN_KEY); }
 
+  var authGear = document.getElementById("auth-gear");
   var authBar = document.getElementById("auth-bar");
   var authInput = document.getElementById("auth-input");
   var authSave = document.getElementById("auth-save");
-  var authStatus = document.getElementById("auth-status");
-  var authChange = document.getElementById("auth-change");
   var statusEl = document.getElementById("status");
 
+  // No persistent "connected" banner once a secret is saved — the gear
+  // icon is the only permanent trace, matching it stays out of the way.
   function renderAuth() {
-    if (getToken()) {
-      authBar.hidden = true;
-      authStatus.hidden = false;
-    } else {
-      authBar.hidden = false;
-      authStatus.hidden = true;
-    }
+    authBar.hidden = !!getToken();
   }
+
+  authGear.addEventListener("click", function () {
+    authBar.hidden = !authBar.hidden;
+    if (!authBar.hidden) authInput.focus();
+  });
 
   authSave.addEventListener("click", function () {
     var v = authInput.value.trim();
     if (!v) return;
     setToken(v);
     authInput.value = "";
-    renderAuth();
+    authBar.hidden = true;
     loadMacros();
-  });
-
-  authChange.addEventListener("click", function (e) {
-    e.preventDefault();
-    clearToken();
-    renderAuth();
   });
 
   function setStatus(msg, isError) {
@@ -269,7 +324,7 @@
     return fetch(path, opts).then(function (res) {
       if (res.status === 401) {
         clearToken();
-        renderAuth();
+        authBar.hidden = false;
         setStatus("Wrong or expired secret — enter it again.", true);
         throw new Error("unauthorized");
       }
@@ -277,46 +332,62 @@
     });
   }
 
-  // --- tabs ---
-
-  var tabBtnDictate = document.getElementById("tab-btn-dictate");
-  var tabBtnRemote = document.getElementById("tab-btn-remote");
-  var viewDictate = document.getElementById("view-dictate");
-  var viewRemote = document.getElementById("view-remote");
-
-  function showTab(name) {
-    var dictateActive = name === "dictate";
-    tabBtnDictate.classList.toggle("active", dictateActive);
-    tabBtnRemote.classList.toggle("active", !dictateActive);
-    viewDictate.classList.toggle("active", dictateActive);
-    viewRemote.classList.toggle("active", !dictateActive);
-    if (!dictateActive) loadMacros();
-  }
-  tabBtnDictate.addEventListener("click", function () { showTab("dictate"); });
-  tabBtnRemote.addEventListener("click", function () { showTab("remote"); });
-
   // --- dictate ---
 
   var dictateText = document.getElementById("dictate-text");
   var dictateSend = document.getElementById("dictate-send");
+  var dictateSendEnter = document.getElementById("dictate-send-enter");
+
+  function doType(text) {
+    return apiFetch("/type", { method: "POST", body: text }).then(function (res) {
+      if (!res.ok) throw new Error("send failed (" + res.status + ")");
+    });
+  }
 
   dictateSend.addEventListener("click", function () {
     var text = dictateText.value;
     if (!text.trim()) return;
     dictateSend.disabled = true;
-    apiFetch("/type", { method: "POST", body: text })
-      .then(function (res) {
-        if (!res.ok) throw new Error("send failed (" + res.status + ")");
+    doType(text)
+      .then(function () {
+        pushHistory(text);
         dictateText.value = "";
         setStatus("Sent.");
       })
       .catch(function (err) {
         if (err.message !== "unauthorized") setStatus(err.message, true);
       })
-      .finally(function () { dictateSend.disabled = false; });
+      .finally(function () {
+        dictateSend.disabled = false;
+        // Refocus so the keyboard stays up for the next dictation — only
+        // the mic tap is needed next time, not tap-box-then-tap-mic again.
+        dictateText.focus();
+      });
   });
 
-  // --- remote: key-combo buttons ---
+  // Combined action for text you already know is final — types it, then
+  // immediately confirms with Enter, in one tap.
+  dictateSendEnter.addEventListener("click", function () {
+    var text = dictateText.value;
+    if (!text.trim()) return;
+    dictateSendEnter.disabled = true;
+    doType(text)
+      .then(function () { return sendKey("enter"); })
+      .then(function () {
+        pushHistory(text);
+        dictateText.value = "";
+        setStatus("Sent + Enter.");
+      })
+      .catch(function (err) {
+        if (err.message !== "unauthorized") setStatus(err.message, true);
+      })
+      .finally(function () {
+        dictateSendEnter.disabled = false;
+        dictateText.focus();
+      });
+  });
+
+  // --- key-combo buttons (nav grid, secondary row, dictate's Enter) ---
 
   document.querySelectorAll("[data-key]").forEach(function (btn) {
     btn.addEventListener("click", function () {
@@ -335,10 +406,28 @@
       });
   }
 
-  // --- remote: macros ---
+  // Clears the current line on the host side — Ctrl+A/Delete doesn't work
+  // for this because readline-based inputs (a shell, Claude Code's own
+  // prompt) treat Ctrl+A as "jump to line start," not "select all." The
+  // readline-correct way to wipe a line regardless of cursor position is
+  // End, then kill-backward-to-start.
+  document.getElementById("btn-clear-line").addEventListener("click", function () {
+    sendKey("ctrl+e").then(function () { return sendKey("ctrl+u"); });
+  });
 
+  // --- macros (collapsed accordion) ---
+
+  var macrosToggle = document.getElementById("macros-toggle");
   var macroRow = document.getElementById("macro-row");
   var macroAddBtn = document.getElementById("macro-add");
+  var macroAddRow = document.getElementById("macro-add-row");
+
+  macrosToggle.addEventListener("click", function () {
+    var opening = macroRow.hidden;
+    macroRow.hidden = !opening;
+    macrosToggle.innerHTML = (opening ? "&#9662;" : "&#9656;") + " Macros";
+    if (!opening) macroAddRow.hidden = true;
+  });
 
   function loadMacros() {
     if (!getToken()) return;
@@ -389,7 +478,6 @@
       });
   }
 
-  var macroAddRow = document.getElementById("macro-add-row");
   var macroAddInput = document.getElementById("macro-add-input");
   var macroAddConfirm = document.getElementById("macro-add-confirm");
   var macroAddCancel = document.getElementById("macro-add-cancel");
@@ -444,6 +532,66 @@
       .catch(function (err) {
         if (err.message !== "unauthorized") setStatus(err.message, true);
       });
+  }
+
+  // --- history: last 10 sent dictations, device-local (localStorage), so
+  // text can be recalled and resent if it landed in the wrong focused
+  // window and appeared "lost". Not synced to the server.
+
+  var HISTORY_KEY = "dictationHistory";
+  var HISTORY_MAX = 10;
+
+  var historyToggle = document.getElementById("history-toggle");
+  var historyRow = document.getElementById("history-row");
+  var historyEmpty = document.getElementById("history-empty");
+
+  historyToggle.addEventListener("click", function () {
+    var opening = historyRow.hidden;
+    historyRow.hidden = !opening;
+    historyToggle.innerHTML = (opening ? "&#9662;" : "&#9656;") + " History";
+    if (opening) renderHistory();
+  });
+
+  function loadHistoryLocal() {
+    try {
+      var raw = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+      return Array.isArray(raw) ? raw : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function pushHistory(text) {
+    text = text.trim();
+    if (!text) return;
+    var hist = loadHistoryLocal().filter(function (t) { return t !== text; });
+    hist.unshift(text);
+    if (hist.length > HISTORY_MAX) hist = hist.slice(0, HISTORY_MAX);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(hist));
+    if (!historyRow.hidden) renderHistory();
+  }
+
+  function renderHistory() {
+    var hist = loadHistoryLocal();
+    historyRow.querySelectorAll(".history-chip").forEach(function (el) { el.remove(); });
+    historyEmpty.hidden = hist.length > 0;
+    hist.forEach(function (text) {
+      var chip = document.createElement("div");
+      chip.className = "history-chip";
+
+      var load = document.createElement("button");
+      load.className = "history-load";
+      load.textContent = text;
+      load.title = "Tap to load into the text box";
+      load.addEventListener("click", function () {
+        dictateText.value = text;
+        dictateText.focus();
+        setStatus("Loaded into text box — review, then Send.");
+      });
+
+      chip.appendChild(load);
+      historyRow.appendChild(chip);
+    });
   }
 
   // --- init ---
