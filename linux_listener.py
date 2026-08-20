@@ -15,6 +15,7 @@ import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Lock
+from urllib.parse import parse_qs, urlparse
 
 import macros_store
 from injection import get_backend
@@ -77,10 +78,11 @@ class Handler(BaseHTTPRequestHandler):
     # --- routing ---
 
     def do_GET(self):
-        if self.path == "/":
+        path = urlparse(self.path)
+        if path.path == "/":
             self._serve_index()
-        elif self.path == "/macros":
-            self._handle_macros_list()
+        elif path.path == "/macros":
+            self._handle_macros_list(path.query)
         else:
             self._respond(404, b"not found")
 
@@ -215,12 +217,23 @@ class Handler(BaseHTTPRequestHandler):
 
     # --- /macros ---
 
-    def _handle_macros_list(self):
+    @staticmethod
+    def _macro_target(query="", payload=None):
+        if payload is not None:
+            return payload.get("target", "claude")
+        return parse_qs(query).get("target", ["claude"])[0]
+
+    def _handle_macros_list(self, query):
         if not self._check_auth():
             return
-        with macros_lock:
-            data = macros_store.load()
-        self._send_json(200, data)
+        try:
+            target = self._macro_target(query)
+            with macros_lock:
+                macros = macros_store.list_for(target)
+        except ValueError:
+            self._respond(400, b"unknown target")
+            return
+        self._send_json(200, {"target": target, "macros": macros})
 
     def _handle_macros_add(self):
         if not self._check_auth():
@@ -233,13 +246,14 @@ class Handler(BaseHTTPRequestHandler):
         try:
             payload = json.loads(body)
             text = payload["text"]
+            target = self._macro_target(payload=payload)
         except (json.JSONDecodeError, KeyError, TypeError):
             self._respond(400, b'expected JSON body: {"text": "..."}')
             return
 
         try:
             with macros_lock:
-                macro = macros_store.add(text)
+                macro = macros_store.add(target, text)
         except ValueError as e:
             self._respond(400, str(e).encode("utf-8"))
             return
@@ -258,12 +272,17 @@ class Handler(BaseHTTPRequestHandler):
         try:
             payload = json.loads(body)
             macro_id = payload["id"]
+            target = self._macro_target(payload=payload)
         except (json.JSONDecodeError, KeyError, TypeError):
             self._respond(400, b'expected JSON body: {"id": "..."}')
             return
 
-        with macros_lock:
-            found = macros_store.remove(macro_id)
+        try:
+            with macros_lock:
+                found = macros_store.remove(target, macro_id)
+        except ValueError as e:
+            self._respond(400, str(e).encode("utf-8"))
+            return
 
         if not found:
             self._respond(404, b"not found")

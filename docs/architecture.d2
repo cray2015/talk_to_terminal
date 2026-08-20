@@ -1,0 +1,56 @@
+title: Talk to Terminal — Architecture {near: top-center}
+
+phone: Phone browser\n(web/index.html)\nDictate + Remote UI,\ntarget: Claude Code / Codex\n(iOS Safari + Android Chrome,\nnative mic dictation)
+
+lan: LAN / Wi-Fi {
+  shape: cloud
+  style.fill: transparent
+}
+
+linux: Linux box (Mint Cinnamon, X11) {
+  service: talk-to-terminal.service\n(systemd --user,\nWantedBy=default.target) {
+    shape: hexagon
+  }
+
+  listener: linux_listener.py\n(ThreadingHTTPServer) {
+    routes: "GET /\nGET /macros\nPOST /type\nPOST /key\nPOST /macros\nPOST /macros/remove" {
+      shape: rectangle
+      style.font-size: 13
+    }
+    auth: X-Auth shared secret\n(hmac.compare_digest)
+  }
+
+  injection: injection.py {
+    xdotool_backend: XdotoolBackend\n(type via xdotool,\npaste mode via xclip)
+    ydotool_backend: YdotoolBackend\n(Wayland stub,\nnot implemented)
+  }
+
+  macros_store: macros_store.py\n(profiles: claude, codex)
+  macros_file: ~/.config/talk-to-terminal/\nmacros.json {
+    shape: cylinder
+  }
+  config: config.env\n(DICTATION_* env vars) {
+    shape: page
+  }
+
+  service -> listener: ExecStart
+  listener -> injection.xdotool_backend: type_text() / press_key()
+  listener -> macros_store: load() / add() / remove()
+  macros_store -> macros_file: atomic write\n(tempfile + os.replace)
+  config -> listener: EnvironmentFile\n(host, port, secret,\ninjection mode, ...)
+}
+
+x11: X11 session (DISPLAY :0) {
+  focused: Focused window {
+    claude_code: Claude Code CLI\n(terminal)
+    codex: Codex CLI\n(terminal)
+    editor: GUI text editor
+    vscode: VS Code\neditor pane
+  }
+}
+
+phone -> lan: "POST /type, /key,\nGET/POST /macros* (fetch)"
+
+lan -> linux.listener: "HTTP :8766\n(bound to LAN IP only,\nnever 0.0.0.0)"
+
+linux.injection.xdotool_backend -> x11.focused: "xdotool key/type,\nxclip (paste mode) —\nlands in whatever has focus"

@@ -37,6 +37,7 @@
     margin-bottom: 16px;
   }
   h1 { font-size: 18px; margin: 0; }
+  #target-select { padding: 7px 8px; font-size: 13px; }
   #auth-gear {
     padding: 8px 10px;
     font-size: 16px;
@@ -126,6 +127,23 @@
   .nav-grid [data-key="esc"]  { grid-area: esc; font-size: 15px; }
   .nav-grid [data-key="tab"]  { grid-area: tab; font-size: 15px; }
 
+  #codex-workflow {
+    margin-bottom: 12px;
+  }
+  #codex-workflow .section-label {
+    margin-top: 0;
+  }
+  .codex-action {
+    flex: 1;
+    padding: 14px 8px;
+    font-weight: 600;
+  }
+  #codex-plan-toggle {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+
   .row {
     display: flex;
     flex-wrap: wrap;
@@ -149,6 +167,18 @@
     padding: 8px 0;
     color: var(--muted);
     font-size: 13px;
+  }
+
+  .accordion-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .accordion-header .accordion-toggle { width: auto; }
+  .edit-toggle {
+    color: var(--accent);
+    font-weight: 600;
   }
 
   .macro-chip {
@@ -222,7 +252,13 @@
 
 <div class="header">
   <h1>Talk to Terminal</h1>
-  <button id="auth-gear" aria-label="Secret settings">⚙</button>
+  <div class="row">
+    <select id="target-select" aria-label="Code assistant target">
+      <option value="claude">Claude Code</option>
+      <option value="codex">Codex</option>
+    </select>
+    <button id="auth-gear" aria-label="Secret settings">⚙</button>
+  </div>
 </div>
 
 <div id="auth-bar" hidden>
@@ -252,8 +288,15 @@
   <button data-key="tab">Tab</button>
   <button data-key="down">&darr;</button>
 </div>
+<div id="codex-workflow" hidden>
+  <div class="section-label">Codex workflow</div>
+  <div class="dictate-row">
+    <button id="codex-plan-toggle" class="codex-action" data-key="shift+tab">Plan &harr; Default</button>
+    <button id="codex-permissions" class="codex-action">Permissions</button>
+  </div>
+</div>
 <div class="row">
-  <button class="btn-secondary" data-key="shift+tab">Shift+Tab</button>
+  <button id="shift-tab-control" class="btn-secondary" data-key="shift+tab">Shift+Tab</button>
   <button class="btn-secondary" data-key="ctrl+c">Ctrl+C</button>
   <button class="btn-secondary" id="btn-clear-line">Clear</button>
   <button class="btn-secondary" data-key="1">1</button>
@@ -261,10 +304,13 @@
   <button class="btn-secondary" data-key="3">3</button>
 </div>
 
-<button id="macros-toggle" class="accordion-toggle">&#9656; Macros</button>
+<div class="accordion-header">
+  <button id="macros-toggle" class="accordion-toggle">&#9656; Macros</button>
+  <button id="macro-edit-toggle" class="accordion-toggle edit-toggle" hidden>Edit</button>
+</div>
 <div class="row" id="macro-row" hidden>
   <!-- macro chips injected here -->
-  <button id="macro-add">+ Add</button>
+  <button id="macro-add" hidden>+ Add</button>
 </div>
 <div class="row" id="macro-add-row" hidden>
   <input id="macro-add-input" type="text" placeholder="/help" style="flex:1 1 60%;">
@@ -279,16 +325,42 @@
   "use strict";
 
   var TOKEN_KEY = "dictationAuth";
+  var TARGET_KEY = "dictationTarget";
+  var DEFAULT_TARGET = "claude";
 
   function getToken() { return localStorage.getItem(TOKEN_KEY) || ""; }
   function setToken(t) { localStorage.setItem(TOKEN_KEY, t); }
   function clearToken() { localStorage.removeItem(TOKEN_KEY); }
+  function getTarget() {
+    var target = localStorage.getItem(TARGET_KEY);
+    return target === "codex" ? target : DEFAULT_TARGET;
+  }
+  function setTarget(target) { localStorage.setItem(TARGET_KEY, target); }
 
   var authGear = document.getElementById("auth-gear");
   var authBar = document.getElementById("auth-bar");
   var authInput = document.getElementById("auth-input");
   var authSave = document.getElementById("auth-save");
   var statusEl = document.getElementById("status");
+  var targetSelect = document.getElementById("target-select");
+  var codexWorkflow = document.getElementById("codex-workflow");
+  var shiftTabControl = document.getElementById("shift-tab-control");
+
+  function renderTarget() {
+    var isCodex = getTarget() === "codex";
+    var label = isCodex ? "Codex" : "Claude Code";
+    targetSelect.value = getTarget();
+    document.title = "Talk to Terminal — " + label;
+    codexWorkflow.hidden = !isCodex;
+    shiftTabControl.hidden = isCodex;
+  }
+
+  targetSelect.addEventListener("change", function () {
+    setTarget(targetSelect.value);
+    renderTarget();
+    loadMacros();
+    setStatus("Switched to " + (getTarget() === "codex" ? "Codex" : "Claude Code") + " controls.");
+  });
 
   // No persistent "connected" banner once a secret is saved — the gear
   // icon is the only permanent trace, matching it stays out of the way.
@@ -415,29 +487,68 @@
     sendKey("ctrl+e").then(function () { return sendKey("ctrl+u"); });
   });
 
+  // Codex keeps its approval policy separate from the Plan/Default toggle.
+  // This sends its built-in picker without adding a permanent user macro.
+  document.getElementById("codex-permissions").addEventListener("click", function () {
+    runMacro("/permissions");
+  });
+
   // --- macros (collapsed accordion) ---
 
   var macrosToggle = document.getElementById("macros-toggle");
+  var macroEditToggle = document.getElementById("macro-edit-toggle");
   var macroRow = document.getElementById("macro-row");
   var macroAddBtn = document.getElementById("macro-add");
   var macroAddRow = document.getElementById("macro-add-row");
+
+  // Edit mode gates the per-macro "x" (and "+ Add") behind a deliberate
+  // toggle, off by default — the x used to sit right next to the run
+  // buttons you tap constantly, one fat-finger away from deleting a
+  // macro. Always resets to off when the section collapses, so it's
+  // never armed the next time you open it just to run something.
+  var macroEditMode = false;
+  var lastMacros = [];
+
+  function setMacroEditMode(on) {
+    macroEditMode = on;
+    macroEditToggle.textContent = on ? "Done" : "Edit";
+    macroAddBtn.hidden = !on;
+    if (!on) macroAddRow.hidden = true;
+    renderMacros(lastMacros);
+  }
 
   macrosToggle.addEventListener("click", function () {
     var opening = macroRow.hidden;
     macroRow.hidden = !opening;
     macrosToggle.innerHTML = (opening ? "&#9662;" : "&#9656;") + " Macros";
-    if (!opening) macroAddRow.hidden = true;
+    macroEditToggle.hidden = !opening;
+    if (!opening) setMacroEditMode(false);
+  });
+
+  macroEditToggle.addEventListener("click", function () {
+    setMacroEditMode(!macroEditMode);
   });
 
   function loadMacros() {
     if (!getToken()) return;
-    apiFetch("/macros")
-      .then(function (res) { return res.json(); })
+    // Keep the original Claude endpoint request for a graceful transition
+    // while an already-running listener has not been restarted yet.
+    var path = getTarget() === "claude"
+      ? "/macros"
+      : "/macros?target=" + encodeURIComponent(getTarget());
+    apiFetch(path)
+      .then(function (res) {
+        if (!res.ok) throw new Error("macro list failed (" + res.status + ")");
+        return res.json();
+      })
       .then(function (data) { renderMacros(data.macros || []); })
-      .catch(function () { /* status already set by apiFetch on 401 */ });
+      .catch(function (err) {
+        if (err.message !== "unauthorized") setStatus(err.message, true);
+      });
   }
 
   function renderMacros(macros) {
+    lastMacros = macros;
     macroRow.querySelectorAll(".macro-chip").forEach(function (el) { el.remove(); });
     macros.forEach(function (m) {
       var chip = document.createElement("div");
@@ -447,18 +558,20 @@
       run.className = "macro-run";
       run.textContent = m.text;
       run.addEventListener("click", function () { runMacro(m.text); });
-
-      var remove = document.createElement("button");
-      remove.className = "macro-remove";
-      remove.textContent = "×";
-      remove.setAttribute("aria-label", "Remove " + m.text);
-      remove.addEventListener("click", function (e) {
-        e.stopPropagation();
-        removeMacro(m.id);
-      });
-
       chip.appendChild(run);
-      chip.appendChild(remove);
+
+      if (macroEditMode) {
+        var remove = document.createElement("button");
+        remove.className = "macro-remove";
+        remove.textContent = "×";
+        remove.setAttribute("aria-label", "Remove " + m.text);
+        remove.addEventListener("click", function (e) {
+          e.stopPropagation();
+          removeMacro(m.id);
+        });
+        chip.appendChild(remove);
+      }
+
       macroRow.insertBefore(chip, macroAddBtn);
     });
   }
@@ -491,7 +604,7 @@
 
   function closeAddRow() {
     macroAddRow.hidden = true;
-    macroAddBtn.hidden = false;
+    macroAddBtn.hidden = !macroEditMode;
   }
   macroAddCancel.addEventListener("click", closeAddRow);
 
@@ -501,7 +614,7 @@
     apiFetch("/macros", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: text }),
+      body: JSON.stringify({ target: getTarget(), text: text }),
     })
       .then(function (res) {
         if (!res.ok) throw new Error("add macro failed (" + res.status + ")");
@@ -522,7 +635,7 @@
     apiFetch("/macros/remove", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: id }),
+      body: JSON.stringify({ target: getTarget(), id: id }),
     })
       .then(function (res) {
         if (!res.ok) throw new Error("remove macro failed (" + res.status + ")");
@@ -596,6 +709,7 @@
 
   // --- init ---
 
+  renderTarget();
   renderAuth();
   if (getToken()) loadMacros();
 })();
