@@ -29,7 +29,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s",
 )
-log = logging.getLogger("claude-code-remote")
+log = logging.getLogger("talk-to-terminal")
 
 injection_lock = Lock()
 macros_lock = Lock()
@@ -69,7 +69,7 @@ def load_config():
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "ClaudeCodeRemote/1.0"
+    server_version = "TalkToTerminal/1.0"
 
     def log_message(self, fmt, *args):
         log.info("%s - %s", self.client_address[0], fmt % args)

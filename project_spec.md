@@ -1,4 +1,4 @@
-# Project spec: Claude Code Remote
+# Project spec: Talk to Terminal
 
 ## 1. Goal
 
@@ -158,7 +158,7 @@ first draft to harden, not a finished deliverable:
 
 - `linux_listener.py` — Python stdlib HTTP server, shared-secret auth,
   xdotool-based typing, newline → Return handling
-- `claude-code-remote.service` — systemd user unit
+- `talk-to-terminal.service` — systemd user unit
 - `README.md` — setup steps and the iOS Shortcut configuration
 
 In particular, the prototype hardcodes `LISTEN_HOST`, `LISTEN_PORT`, and
@@ -184,7 +184,7 @@ and the terminal-reliability question above hasn't been tested yet.
 - [ ] Remote mode: browser page (Dictate + Remote tabs) served by the
       same listener, `POST /key` with a server-side allowlist, and a
       user-configurable (add/remove from the page) macro list persisted
-      to `~/.config/claude-code-remote/macros.json` with no restart
+      to `~/.config/talk-to-terminal/macros.json` with no restart
       required to pick up edits
 
 ## 9. Explicitly out of scope
@@ -199,7 +199,7 @@ and the terminal-reliability question above hasn't been tested yet.
 
 ## 10. Acceptance test
 
-1. [x] Start the service on the EliteDesk. — running as `claude-code-remote.service`, active/enabled.
+1. [x] Start the service on the EliteDesk. — running as `talk-to-terminal.service`, active/enabled.
 2. [x] From the iPhone, on the same LAN/Wi-Fi, run the Shortcut and dictate a
    passage. — done, including a long multi-clause passage beyond the
    original two-sentence target.

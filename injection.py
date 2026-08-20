@@ -1,4 +1,4 @@
-"""Keystroke-injection backends for Claude Code Remote.
+"""Keystroke-injection backends for Talk to Terminal.
 
 Kept behind the InjectionBackend interface so the HTTP layer never has to
 change when swapping X11 (xdotool) for Wayland (ydotool) — see

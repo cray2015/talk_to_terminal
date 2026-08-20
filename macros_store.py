@@ -12,7 +12,7 @@ import tempfile
 import uuid
 from pathlib import Path
 
-MACROS_PATH = Path.home() / ".config" / "claude-code-remote" / "macros.json"
+MACROS_PATH = Path.home() / ".config" / "talk-to-terminal" / "macros.json"
 DEFAULT_MACROS = ["/model", "/context", "/cost", "/vis"]
 MAX_MACRO_TEXT_BYTES = 2048
 

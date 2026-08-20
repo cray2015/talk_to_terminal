@@ -1,10 +1,10 @@
 [Unit]
-Description=Claude Code Remote — iPhone dictation and remote control bridge
+Description=Talk to Terminal — phone dictation and remote control bridge
 After=graphical-session.target
 
 [Service]
 Type=simple
-EnvironmentFile=%h/.config/claude-code-remote/config.env
+EnvironmentFile=%h/.config/talk-to-terminal/config.env
 ExecStart=/usr/bin/python3 %h/workspace/iphone_dict_capture/linux_listener.py
 Restart=on-failure
 RestartSec=2

@@ -1,4 +1,4 @@
-# Claude Code Remote
+# Talk to Terminal
 
 Dictate on your iPhone using Apple's own on-device dictation, and have the
 text typed straight into whatever's focused on your Linux box — text
@@ -19,17 +19,17 @@ The service runs directly out of this checkout (`~/workspace/iphone_dict_capture
 — no separate copy step, so a `git pull` here and a service restart is all
 an update takes. Keep the checkout where the systemd unit expects it
 (`~/workspace/iphone_dict_capture/`), or edit `ExecStart` in
-`claude-code-remote.service` if you keep it elsewhere.
+`talk-to-terminal.service` if you keep it elsewhere.
 
 Create your config from the template — this holds the shared secret, so
 it's kept out of the app directory and out of git:
 
 ```bash
-mkdir -p ~/.config/claude-code-remote
-cp config.env.example ~/.config/claude-code-remote/config.env
+mkdir -p ~/.config/talk-to-terminal
+cp config.env.example ~/.config/talk-to-terminal/config.env
 ```
 
-Edit `~/.config/claude-code-remote/config.env`:
+Edit `~/.config/talk-to-terminal/config.env`:
 
 - `DICTATION_HOST` — this box's LAN IP (find it with `ip -4 addr show`,
   or `hostname -I`). Never `0.0.0.0` — the listener refuses to start with
@@ -41,16 +41,16 @@ inherits your graphical session's DISPLAY automatically:
 
 ```bash
 mkdir -p ~/.config/systemd/user
-cp claude-code-remote.service ~/.config/systemd/user/
+cp talk-to-terminal.service ~/.config/systemd/user/
 systemctl --user daemon-reload
-systemctl --user enable --now claude-code-remote.service
-systemctl --user status claude-code-remote.service
-journalctl --user -u claude-code-remote.service -f   # watch logs (never logs dictated text)
+systemctl --user enable --now talk-to-terminal.service
+systemctl --user status talk-to-terminal.service
+journalctl --user -u talk-to-terminal.service -f   # watch logs (never logs dictated text)
 ```
 
 If xdotool silently does nothing, it's almost always a DISPLAY/XAUTHORITY
 mismatch — see the "Troubleshooting" section below and the commented-out
-lines in `claude-code-remote.service`.
+lines in `talk-to-terminal.service`.
 
 Quick manual test from the same machine:
 
@@ -105,7 +105,7 @@ section 5 — the secret is load-bearing here, not just defense in depth).
 TUI apps — including a Claude Code CLI session — may drop or reorder
 characters when text arrives in a fast burst. This hasn't been tested
 against live dictation yet; when you do, work down this list in
-`~/.config/claude-code-remote/config.env` if you see drops:
+`~/.config/talk-to-terminal/config.env` if you see drops:
 
 1. `DICTATION_TYPE_DELAY_MS` — adds a per-character delay to `xdotool
    type` (try `20`–`50`).
@@ -120,7 +120,7 @@ against live dictation yet; when you do, work down this list in
    default).
 
 Restart the service after editing the config
-(`systemctl --user restart claude-code-remote.service`).
+(`systemctl --user restart talk-to-terminal.service`).
 
 ## 5. Troubleshooting
 
@@ -140,9 +140,9 @@ echo $DISPLAY $XAUTHORITY
 ```
 
 If they differ (or the service's are empty), uncomment the `Environment=`
-lines in `claude-code-remote.service`, set them to the values from `echo`
+lines in `talk-to-terminal.service`, set them to the values from `echo`
 above, then `systemctl --user daemon-reload && systemctl --user restart
-claude-code-remote.service`.
+talk-to-terminal.service`.
 
 **Confirming X11 vs Wayland:**
 
@@ -160,7 +160,7 @@ adding the service user to the `input` group).
 Since the unit is `WantedBy=graphical-session.target`, it should restart
 automatically with the session. If it doesn't come back after a logout/
 login or reboot, run `systemctl --user enable --now
-claude-code-remote.service` manually as a workaround and note that here.
+talk-to-terminal.service` manually as a workaround and note that here.
 
 ## 6. Browser remote page
 
@@ -168,11 +168,11 @@ The listener also serves a small browser page — a Dictate tab (a
 browser-based alternative to the iOS Shortcut) and a Remote tab for
 driving a focused Claude Code session without dictating each command.
 No separate service and no new dependency: it's the same
-`claude-code-remote.service` process, same port.
+`talk-to-terminal.service` process, same port.
 
 **Deploying this for the first time** still needs the normal update
 steps — `git pull` in the checkout, then
-`systemctl --user restart claude-code-remote.service` — same as any other
+`systemctl --user restart talk-to-terminal.service` — same as any other
 code change. After that, editing the macro list from the page itself
 does **not** require a restart (see below).
 
@@ -204,7 +204,7 @@ Code behavior:
 - **Macros** (primary row, next to nav) — a user-editable list of text
   snippets, starting with `/model`, `/context`, `/cost`, `/vis`. Tap
   "+ Add" to add one, tap the "×" on a chip to remove it. Edits are
-  saved to `~/.config/claude-code-remote/macros.json` immediately —
+  saved to `~/.config/talk-to-terminal/macros.json` immediately —
   **no service restart needed** to pick them up, since the file is read
   fresh on every request. Clicking a macro types the literal text, then
   presses Enter (two separate calls under the hood, not a trick with a
