@@ -4,6 +4,10 @@
 keystroke control for Claude Code, Codex CLI, or anything else with
 focus, from anywhere on your LAN.**
 
+<p align="center">
+  <img src="docs/screenshots/phone-page.jpg" alt="Talk to Terminal browser page on an iPhone, showing the dictation box, Send/Enter buttons, and the navigation and macro controls for Claude Code" width="320">
+</p>
+
 ## Why this exists
 
 Claude Code and Codex CLI both now ship their own built-in voice
